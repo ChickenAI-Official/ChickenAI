@@ -3,41 +3,44 @@ import requests
 import json
 from datetime import datetime
 
-# --- 1. THE EXACT UI (Clean Reader Aesthetic) ---
-st.set_page_config(page_title="ChickenAI - Clean Reader Edition", layout="wide", initial_sidebar_state="expanded")
+# --- 1. PAGE SETUP & EXACT THEME ---
+st.set_page_config(page_title="ChickenAI", layout="wide")
 
-# This CSS mimics your screenshot exactly and kills all icons
+# CSS to match your screenshot 1:1 and kill all icons
 st.markdown("""
     <style>
-    /* Dark Theme Backgrounds */
-    .stApp { background-color: #1E1E1E; color: #FFFFFF; }
-    [data-testid="stSidebar"] { background-color: #2D2D2D; border-right: 1px solid #444; }
+    /* Dark Backgrounds */
+    .stApp { background-color: #1E1E1E !important; color: white !important; }
+    [data-testid="stSidebar"] { background-color: #2D2D2D !important; border-right: 1px solid #444; }
     
-    /* Hide the default User/Bot icons completely */
+    /* Kill all default Streamlit Icons/Avatars */
     [data-testid="stChatMessageAvatarUser"], 
     [data-testid="stChatMessageAvatarAssistant"],
     .st-emotion-cache-17l2fup { 
         display: none !important; 
     }
 
-    /* Main Chat Window Styling */
-    .chat-window {
+    /* The Main Chat Window (The big dark box) */
+    .chat-container {
         background-color: #262626;
         border: 1px solid #444;
         border-radius: 12px;
-        padding: 30px;
-        min-height: 65vh;
+        padding: 25px;
+        height: 60vh;
+        overflow-y: auto;
         margin-bottom: 20px;
     }
 
-    /* Sidebar Buttons (New Chat, Delete) */
-    .stButton>button { width: 100%; border-radius: 8px; font-weight: 600; }
+    /* Make Sidebar Text White and Visible */
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
+        color: white !important;
+    }
     
-    /* Input Box at the bottom */
+    /* Style the buttons to match the image */
+    .stButton>button { width: 100%; border-radius: 8px; }
+    
+    /* Input box styling */
     .stTextInput input { background-color: #333 !important; color: white !important; border: 1px solid #444 !important; }
-    
-    /* Separator line like in your screenshot */
-    .msg-sep { border-bottom: 1px solid #444; margin: 15px 0; opacity: 0.5; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -47,70 +50,64 @@ if "messages" not in st.session_state:
 if "history" not in st.session_state:
     st.session_state.history = [datetime.now().strftime("%Y-%m-%d_%H-%M")]
 
-# --- 3. SIDEBAR (Exact Match) ---
+# --- 3. SIDEBAR (Exactly like the goal image) ---
 with st.sidebar:
-    st.markdown("<h1 style='text-align: center; margin-bottom: 20px;'>CHICKEN AI</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>CHICKEN AI</h1>", unsafe_allow_html=True)
     if st.button("➕ New Chat", type="primary"):
         st.session_state.messages = []
         st.session_state.history.append(datetime.now().strftime("%Y-%m-%d_%H-%M"))
     
-    st.write("")
-    st.markdown("<div style='background: #333; padding: 5px; text-align: center; border-radius: 5px;'>History</div>", unsafe_allow_html=True)
+    st.write("---")
+    st.markdown("<div style='background:#333; padding:5px; border-radius:5px; text-align:center;'>History</div>", unsafe_allow_html=True)
     for h in st.session_state.history:
-        st.button(f"📅 {h}", key=f"hist_{h}")
+        st.button(f"📅 {h}", key=f"h_{h}")
     
-    st.divider()
+    st.write("---")
     if st.button("🗑️ Delete Chat", type="secondary"):
         st.session_state.messages = []
     st.toggle("Voice Mode")
 
-# --- 4. MAIN CHAT AREA ---
-with st.container():
-    st.markdown('<div class="chat-window">', unsafe_allow_html=True)
-    for msg in st.session_state.messages:
-        label = "USER" if msg["role"] == "user" else "AI"
-        st.markdown(f"**{label}:** {msg['content']}")
-        st.markdown('<div class="msg-sep"></div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+# --- 4. THE CHAT BOX ---
+# This creates the clean black box from your screenshot
+st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+for msg in st.session_state.messages:
+    label = "USER" if msg["role"] == "user" else "AI"
+    st.markdown(f"**{label}:** {msg['content']}")
+    st.markdown("<hr style='border-top: 1px solid #333;'>", unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 # --- 5. INPUT AREA ---
-input_col, btn_col = st.columns([9, 1])
-with input_col:
+col1, col2 = st.columns([9, 1])
+with col1:
     user_input = st.text_input("", placeholder="Type your message here...", label_visibility="collapsed")
-with btn_col:
-    send_pressed = st.button("Send")
+with col2:
+    send_btn = st.button("Send")
 
-# --- 6. API CALL ---
-if (send_pressed or user_input) and user_input:
+# --- 6. AI CONNECTION ---
+if (send_btn or user_input) and user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
     
     try:
-        # Get the key from your Secrets
-        api_key = st.secrets.get("API_KEY")
+        api_key = st.secrets["API_KEY"]
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            data=json.dumps({
+                "model": "openai/gpt-4o-mini",
+                "messages": st.session_state.messages
+            })
+        )
         
-        if not api_key:
-            st.error("Error: API_KEY not found in Secrets. Check Advanced Settings.")
+        result = response.json()
+        
+        if "choices" in result:
+            answer = result['choices'][0]['message']['content']
+            st.session_state.messages.append({"role": "assistant", "content": answer})
+            st.rerun()
         else:
-            response = requests.post(
-                url="https://openrouter.ai/api/v1/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}"},
-                data=json.dumps({
-                    "model": "openai/gpt-4o-mini",
-                    "messages": st.session_state.messages
-                })
-            )
+            # Fixes the 'choices' error by showing the actual message
+            err = result.get("error", {}).get("message", "Check your API Key")
+            st.error(f"Error: {err}")
             
-            data = response.json()
-            
-            # This fixes the 'choices' crash by checking the data first
-            if "choices" in data:
-                ai_reply = data["choices"][0]["message"]["content"]
-                st.session_state.messages.append({"role": "assistant", "content": ai_reply})
-                st.rerun()
-            else:
-                # If OpenRouter is mad at the key, it will tell you why here
-                error_info = data.get("error", {}).get("message", "Invalid API Key")
-                st.error(f"AI Connection Error: {error_info}")
-                
     except Exception as e:
         st.error(f"System Error: {e}")
