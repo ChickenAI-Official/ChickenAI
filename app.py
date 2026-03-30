@@ -3,93 +3,71 @@ import requests
 import json
 from datetime import datetime
 
-# --- 1. PAGE SETUP & EXACT THEME ---
-st.set_page_config(page_title="ChickenAI", layout="wide")
+# --- 1. THE LOOK (Total Icon Kill) ---
+st.set_page_config(page_title="Chicken AI", layout="wide")
 
-# CSS to match your screenshot 1:1 and kill all icons
 st.markdown("""
     <style>
-    /* Dark Backgrounds */
+    /* Force Dark Theme */
     .stApp { background-color: #1E1E1E !important; color: white !important; }
-    [data-testid="stSidebar"] { background-color: #2D2D2D !important; border-right: 1px solid #444; }
+    [data-testid="stSidebar"] { background-color: #2D2D2D !important; }
     
-    /* Kill all default Streamlit Icons/Avatars */
-    [data-testid="stChatMessageAvatarUser"], 
-    [data-testid="stChatMessageAvatarAssistant"],
-    .st-emotion-cache-17l2fup { 
-        display: none !important; 
-    }
-
-    /* The Main Chat Window (The big dark box) */
-    .chat-container {
+    /* The Chat Box from your screenshot */
+    .clean-chat-box {
         background-color: #262626;
         border: 1px solid #444;
-        border-radius: 12px;
-        padding: 25px;
-        height: 60vh;
+        border-radius: 10px;
+        padding: 20px;
+        height: 65vh;
         overflow-y: auto;
-        margin-bottom: 20px;
+        font-family: sans-serif;
     }
-
-    /* Make Sidebar Text White and Visible */
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
-        color: white !important;
-    }
-    
-    /* Style the buttons to match the image */
-    .stButton>button { width: 100%; border-radius: 8px; }
-    
-    /* Input box styling */
-    .stTextInput input { background-color: #333 !important; color: white !important; border: 1px solid #444 !important; }
+    .user-line { color: #FFFFFF; font-weight: bold; margin-top: 10px; }
+    .ai-line { color: #00FFCC; font-weight: bold; margin-top: 10px; }
+    .sep { border-bottom: 1px solid #444; margin: 10px 0; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. LOGIC ---
+# --- 2. STATE ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "history" not in st.session_state:
-    st.session_state.history = [datetime.now().strftime("%Y-%m-%d_%H-%M")]
 
-# --- 3. SIDEBAR (Exactly like the goal image) ---
+# --- 3. SIDEBAR ---
 with st.sidebar:
-    st.markdown("<h1 style='text-align: center;'>CHICKEN AI</h1>", unsafe_allow_html=True)
+    st.title("CHICKEN AI")
     if st.button("➕ New Chat", type="primary"):
         st.session_state.messages = []
-        st.session_state.history.append(datetime.now().strftime("%Y-%m-%d_%H-%M"))
-    
+        st.rerun()
     st.write("---")
-    st.markdown("<div style='background:#333; padding:5px; border-radius:5px; text-align:center;'>History</div>", unsafe_allow_html=True)
-    for h in st.session_state.history:
-        st.button(f"📅 {h}", key=f"h_{h}")
-    
-    st.write("---")
-    if st.button("🗑️ Delete Chat", type="secondary"):
-        st.session_state.messages = []
-    st.toggle("Voice Mode")
+    st.write("History")
+    st.button(datetime.now().strftime("%Y-%m-%d"), disabled=True)
 
-# --- 4. THE CHAT BOX ---
-# This creates the clean black box from your screenshot
-st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+# --- 4. MAIN WINDOW (The exact image look) ---
+# We are NOT using st.chat_message here so icons CANNOT appear.
+chat_html = '<div class="clean-chat-box">'
 for msg in st.session_state.messages:
-    label = "USER" if msg["role"] == "user" else "AI"
-    st.markdown(f"**{label}:** {msg['content']}")
-    st.markdown("<hr style='border-top: 1px solid #333;'>", unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
+    if msg["role"] == "user":
+        chat_html += f'<div class="user-line">USER: {msg["content"]}</div>'
+    else:
+        chat_html += f'<div class="ai-line">AI: {msg["content"]}</div>'
+    chat_html += '<div class="sep"></div>'
+chat_html += '</div>'
 
-# --- 5. INPUT AREA ---
+st.markdown(chat_html, unsafe_allow_html=True)
+
+# --- 5. INPUT ---
 col1, col2 = st.columns([9, 1])
 with col1:
     user_input = st.text_input("", placeholder="Type your message here...", label_visibility="collapsed")
 with col2:
-    send_btn = st.button("Send")
+    send = st.button("Send")
 
-# --- 6. AI CONNECTION ---
-if (send_btn or user_input) and user_input:
+# --- 6. API ---
+if (send or user_input) and user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
-    
     try:
         api_key = st.secrets["API_KEY"]
-        response = requests.post(
+        r = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}"},
             data=json.dumps({
@@ -97,17 +75,11 @@ if (send_btn or user_input) and user_input:
                 "messages": st.session_state.messages
             })
         )
-        
-        result = response.json()
-        
-        if "choices" in result:
-            answer = result['choices'][0]['message']['content']
-            st.session_state.messages.append({"role": "assistant", "content": answer})
+        data = r.json()
+        if "choices" in data:
+            st.session_state.messages.append({"role": "assistant", "content": data["choices"][0]["message"]["content"]})
             st.rerun()
         else:
-            # Fixes the 'choices' error by showing the actual message
-            err = result.get("error", {}).get("message", "Check your API Key")
-            st.error(f"Error: {err}")
-            
+            st.error(f"Error: {data.get('error', {}).get('message', 'Check API Key')}")
     except Exception as e:
         st.error(f"System Error: {e}")
